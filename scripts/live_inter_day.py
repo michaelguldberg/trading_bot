@@ -27,28 +27,6 @@ inter_day_strategy = MultiInterDayTrader(
     },
 )
 
-# intra_day_strategy = MultiInterDayTrader(
-#     name="mlstrat",
-#     broker=broker,
-#     parameters={
-#         "symbols": SYMBOLS,
-#         "cash_at_risk": CASH_AT_RISK,
-#         "sleeptime": "1M",
-#         "discord_webhook_url": WEBHOOK,
-#     },
-# )
-
-# inter_day_strategy.backtest(
-#     YahooDataBacktesting,
-#     START_DATE,
-#     END_DATE,
-#     parameters={
-#         "symbols": SYMBOLS,
-#         "cash_at_risk": CASH_AT_RISK,
-#         "sleeptime": SLEEPTIME,
-#     },
-# )
-
 # #Live Trading
 trader = Trader()
 trader.add_strategy(inter_day_strategy)
