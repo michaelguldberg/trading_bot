@@ -119,11 +119,12 @@ class InterDayTrader(Strategy):
             key_id=ALPACA_CREDS["API_KEY"],
             secret_key=ALPACA_CREDS["API_SECRET"],
         )
+        self.signal_probabilities = []
 
     def position_sizing(self, symbol, probability):
         cash = self.get_cash()
         last_price = round(self.get_last_price(symbol), 2)
-        quantity = round((cash * self.cash_at_risk * probability) / last_price)
+        quantity = round((cash * self.cash_at_risk * probability) / last_price, 2)
         return cash, last_price, quantity
 
     def get_dates(self):
@@ -212,9 +213,35 @@ class InterDayTrader(Strategy):
     def on_trading_iteration(self):
         for symbol in self.symbols:
             stock_data, model, signal, probability = self.train_model(symbol=symbol, training_years=10)
-            cash, last_price, quantity = self.position_sizing(symbol, probability)
-            self.place_order(symbol, signal, quantity, last_price)
+            if signal in [0, 2]:
+                self.signal_probabilities.append(probability)
+                normalized_probability = probability
+                if len(self.signal_probabilities) not in [0,1] and min(self.signal_probabilities) != max(self.signal_probabilities):
+                    min_prob = min(self.signal_probabilities)
+                    max_prob = max(self.signal_probabilities)
+                    normalized_probability = (probability - min_prob) / (max_prob - min_prob)
+                cash, last_price, quantity = self.position_sizing(symbol, normalized_probability)
+                self.place_order(symbol, signal, quantity, last_price)
             
+
+def get_random_dates(years=range(2015,2025)):
+    date_periods = []
+    for i in range(5):
+        start_year = random.choice(years)
+        end_year = random.choice(range(start_year, years[-1]))
+        if start_year == end_year:
+            start_month = random.choice(range(1,13))
+            end_month = random.choice(range(start_month, 13))
+            if start_month == end_month:
+                start_day = random.choice(range(1, 31))
+                end_day = random.choice(range(start_day, 31))
+        else:
+            start_month = random.choice(range(1,13))
+            end_month = random.choice(range(1,13))
+            start_day = random.choice(range(1,31))
+            end_day = random.choice(range(1,31))
+        date_periods.append((datetime(start_year, start_month, start_day), datetime(end_year, end_month, end_day)))
+    return date_periods
 
 if __name__ == "__main__":
     broker = Alpaca(ALPACA_CREDS)
@@ -246,23 +273,7 @@ if __name__ == "__main__":
         (datetime(2019, 1, 1), datetime(2019, 3, 13)),
         # Add more periods as needed
     ]
-    # years = range(2015,2025)
-    # date_periods = []
-    # for i in range(5):
-    #     start_year = random.choice(years)
-    #     end_year = random.choice(range(start_year, years[-1]))
-    #     if start_year == end_year:
-    #         start_month = random.choice(range(1,13))
-    #         end_month = random.choice(range(start_month, 13))
-    #         if start_month == end_month:
-    #             start_day = random.choice(range(1, 31))
-    #             end_day = random.choice(range(start_day, 31))
-    #     else:
-    #         start_month = random.choice(range(1,13))
-    #         end_month = random.choice(range(1,13))
-    #         start_day = random.choice(range(1,31))
-    #         end_day = random.choice(range(1,31))
-    #     date_periods.append((datetime(start_year, start_month, start_day), datetime(end_year, end_month, end_day)))
+    # date_periods = get_random_dates()
 
     # Initialize an empty DataFrame to store results
     results_df = pd.DataFrame(columns=['Start Date', 'End Date', 'CAGR', 'Volatility', 'Sharpe', 'Max Drawdown', 'ROMAD', 'Total Return'])
