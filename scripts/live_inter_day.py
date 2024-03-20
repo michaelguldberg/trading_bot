@@ -13,10 +13,10 @@ from config import (
 from lumibot.backtesting import YahooDataBacktesting
 from lumibot.brokers import Alpaca
 from lumibot.traders import Trader
-from inter_day_strategy import MLSentimentTrader, MultiInterDayTrader
+from inter_day_strategy import MLSentimentTrader, InterDayTrader
 
 broker = Alpaca(ALPACA_CREDS)
-inter_day_strategy = MultiInterDayTrader(
+inter_day_strategy = InterDayTrader(
     name="mlstrat",
     broker=broker,
     parameters={

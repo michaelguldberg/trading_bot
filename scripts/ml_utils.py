@@ -4,7 +4,7 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
 
-def train_model(stock_data, features, target, model=KNeighborsClassifier()):
+def train_KNN_model(stock_data, features, target, model=KNeighborsClassifier()):
     X_train, y_train = stock_data[features], stock_data[target]
     model.fit(X_train, y_train)
     return model

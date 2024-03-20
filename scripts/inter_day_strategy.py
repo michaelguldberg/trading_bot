@@ -22,8 +22,9 @@ from finbert_utils import estimate_sentiment
 from lumibot.backtesting import YahooDataBacktesting
 from lumibot.brokers import Alpaca
 from lumibot.strategies.strategy import Strategy
-from ml_utils import train_model, train_random_forest_model
+from ml_utils import train_KNN_model, train_random_forest_model
 from scipy.signal import argrelextrema
+import random
 from timedelta import Timedelta
 
 
@@ -103,12 +104,12 @@ class MLSentimentTrader(Strategy):
 class InterDayTrader(Strategy):
     def initialize(
         self,
-        symbol: str = "SPY",
+        symbols: str = ["SPY"],
         cash_at_risk: float = 0.5,
         sleeptime: str = "24H",
         discord_webhook_url=None,
     ):
-        self.symbol = symbol
+        self.symbols = symbols
         self.sleeptime = sleeptime
         self.discord_webhook_url = discord_webhook_url
         self.last_trade = None
@@ -119,10 +120,10 @@ class InterDayTrader(Strategy):
             secret_key=ALPACA_CREDS["API_SECRET"],
         )
 
-    def position_sizing(self):
+    def position_sizing(self, symbol, probability):
         cash = self.get_cash()
-        last_price = round(self.get_last_price(self.symbol), 2)
-        quantity = round((cash * self.cash_at_risk) / last_price)
+        last_price = round(self.get_last_price(symbol), 2)
+        quantity = round((cash * self.cash_at_risk * probability) / last_price)
         return cash, last_price, quantity
 
     def get_dates(self):
@@ -141,18 +142,9 @@ class InterDayTrader(Strategy):
         return super().log_message(message, color, broadcast)
 
     def calculate_and_prepare(self, stock_data):
-        probability, sentiment = self.get_sentiment()
-        if sentiment == "neutral":
-            sentiment = 0
-        elif sentiment == "positive":
-            sentiment = 1
-        else:
-            sentiment = 2
         stock_data["RSI"] = ta.momentum.rsi(stock_data["Close"])
         stock_data["SMA"] = stock_data["Close"].rolling(window=20).mean()
         stock_data["MACD"] = ta.trend.macd_diff(stock_data["Close"])
-        stock_data["Sentiment"] = sentiment
-        stock_data["Sentiment_Probability"] = probability
         for days in [3, 5, 20, 50, 100, 200]:
             stock_data[f"{days}_Day_%_Change"] = stock_data["Close"].pct_change(days)
 
@@ -166,20 +158,18 @@ class InterDayTrader(Strategy):
         stock_data.loc[local_min.index, "Extrema"] = 0
         stock_data.loc[local_max.index, "Extrema"] = 2
         return stock_data.dropna()
-
-    def on_trading_iteration(self):
-        training_years = 10
+    
+    def train_model(self, symbol, training_years=10):
         end_date = self.get_datetime()
         start_date = end_date - Timedelta(days=365 * training_years + 20)
-        interval = "1d" if self.sleeptime == "24H" else "1m"
+        interval = "1d" if self.sleeptime in ["24H", "1D"] else "1m"
         stock_data = yf.download(
-            self.symbol,
+            symbol,
             start=start_date,
             end=end_date,
             interval=interval,
             progress=False,
         )
-
         stock_data = self.calculate_and_prepare(stock_data)
         features = [
             "Close",
@@ -195,12 +185,12 @@ class InterDayTrader(Strategy):
         probability = max(
             model.predict_proba(pd.DataFrame(stock_data[features].iloc[-1, :]).T)[0]
         )
-        # print(f'{signal}: {probability}')
-        cash, last_price, quantity = self.position_sizing()
-        quantity = quantity * probability
+        return stock_data, model, signal, probability
+    
+    def place_order(self, symbol, signal, quantity, last_price):
         if signal == 2:
             order = self.create_order(
-                self.symbol,
+                symbol,
                 quantity,
                 "sell",
                 type="bracket",
@@ -210,33 +200,26 @@ class InterDayTrader(Strategy):
             self.submit_order(order)
         elif signal == 0:
             order = self.create_order(
-                self.symbol,
+                symbol,
                 quantity,
                 "buy",
                 type="bracket",
                 take_profit_price=round(last_price * 1.20),
                 stop_loss_price=round(last_price * 0.95),
-            )
+                )
             self.submit_order(order)
-
-
-class MultiInterDayTrader(InterDayTrader):
-    def initialize(self, symbols, cash_at_risk=0.5, sleeptime: str = "24H"):
-        self.symbols = symbols
-        super().initialize(
-            symbol=symbols[0], cash_at_risk=cash_at_risk, sleeptime=sleeptime
-        )
 
     def on_trading_iteration(self):
         for symbol in self.symbols:
-            self.symbol = symbol
-            super().on_trading_iteration()
-
+            stock_data, model, signal, probability = self.train_model(symbol=symbol, training_years=10)
+            cash, last_price, quantity = self.position_sizing(symbol, probability)
+            self.place_order(symbol, signal, quantity, last_price)
+            
 
 if __name__ == "__main__":
     broker = Alpaca(ALPACA_CREDS)
-    inter_day_strategy = MultiInterDayTrader(
-        name="mlstrat",
+    inter_day_strategy = InterDayTrader(
+        name="inter_day_trader",
         broker=broker,
         parameters={
             "symbols": SYMBOLS,
@@ -245,13 +228,81 @@ if __name__ == "__main__":
             "discord_webhook_url": WEBHOOK,
         },
     )
-    inter_day_strategy.backtest(
-        YahooDataBacktesting,
-        START_DATE,
-        END_DATE,
-        parameters={
-            "symbols": SYMBOLS,
-            "cash_at_risk": CASH_AT_RISK,
-            "sleeptime": SLEEPTIME,
-        },
-    )
+    # backtest = inter_day_strategy.backtest(
+    #     YahooDataBacktesting,
+    #     START_DATE,
+    #     END_DATE,
+    #     budget=500,
+    #     parameters={
+    #         "symbols": SYMBOLS,
+    #         "cash_at_risk": CASH_AT_RISK,
+    #         "sleeptime": SLEEPTIME,
+    #     },
+    # )
+    date_periods = [
+        (datetime(2024, 1, 1), datetime(2024, 1, 31)),
+        (datetime(2024, 2, 1), datetime(2024, 2, 28)),
+        (datetime(2023, 1, 1), datetime(2023, 1, 31)),
+        (datetime(2019, 1, 1), datetime(2019, 3, 13)),
+        # Add more periods as needed
+    ]
+    # years = range(2015,2025)
+    # date_periods = []
+    # for i in range(5):
+    #     start_year = random.choice(years)
+    #     end_year = random.choice(range(start_year, years[-1]))
+    #     if start_year == end_year:
+    #         start_month = random.choice(range(1,13))
+    #         end_month = random.choice(range(start_month, 13))
+    #         if start_month == end_month:
+    #             start_day = random.choice(range(1, 31))
+    #             end_day = random.choice(range(start_day, 31))
+    #     else:
+    #         start_month = random.choice(range(1,13))
+    #         end_month = random.choice(range(1,13))
+    #         start_day = random.choice(range(1,31))
+    #         end_day = random.choice(range(1,31))
+    #     date_periods.append((datetime(start_year, start_month, start_day), datetime(end_year, end_month, end_day)))
+
+    # Initialize an empty DataFrame to store results
+    results_df = pd.DataFrame(columns=['Start Date', 'End Date', 'CAGR', 'Volatility', 'Sharpe', 'Max Drawdown', 'ROMAD', 'Total Return'])
+
+    for start_date, end_date in date_periods:
+        # Assuming inter_day_strategy.backtest(...) is your function call
+        backtest = inter_day_strategy.backtest(
+            YahooDataBacktesting,
+            start_date,
+            end_date,
+            budget=500,
+            parameters={
+                "symbols": SYMBOLS,
+                "cash_at_risk": CASH_AT_RISK,
+                "sleeptime": SLEEPTIME,
+            },
+        )
+        
+        # Extract results
+        cagr = backtest['cagr']
+        volatility = backtest['volatility']
+        sharpe = backtest['sharpe']
+        max_drawdown = backtest['max_drawdown']['drawdown']
+        romad = backtest['romad']
+        total_return = backtest['total_return']
+        
+        # Prepare a new row as a DataFrame to concatenate
+        new_row = pd.DataFrame({
+            'Start Date': [start_date],
+            'End Date': [end_date],
+            'CAGR': [cagr],
+            'Volatility': [volatility],
+            'Sharpe': [sharpe],
+            'Max Drawdown': [max_drawdown],
+            'ROMAD': [romad],
+            'Total Return': [total_return]
+        })
+        # Concatenate the new row
+        results_df = pd.concat([results_df, new_row], ignore_index=True)
+
+    # Display the DataFrame
+    print(results_df)
+    
