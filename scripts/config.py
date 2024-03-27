@@ -2,8 +2,8 @@ from datetime import datetime
 
 import pandas as pd
 
-API_KEY = "PKZ99M8PEGYY37QKHD21"
-API_SECRET = "PZoafr0EDDdNtIxVmtJboR9oWNaQeVhxp6LjERXe"
+API_KEY = "PKPRG8K0NWPZF8OVAD6D"
+API_SECRET = "3GIthGaocQkYhn0SmmIg2ZDErsUoLnwFpU6BQSBO"
 SLEEPTIME = "24H"
 WEBHOOK = 'https://discord.com/api/webhooks/1217652897131663360/h-eefnR2x-n2NMyDiiBJSBTkD4yA2y2p6nduoEPgfmBxoIrJ_BU_s6qR0MvVOX2WHCu1'
 PAPER = True
