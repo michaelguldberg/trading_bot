@@ -143,7 +143,7 @@ class InterDayTrader(Strategy):
         return super().log_message(message, color, broadcast)
 
     def calculate_and_prepare(self, stock_data):
-        stock_data["RSI"] = ta.momentum.rsi(stock_data["Close"])
+        stock_data["TSI"] = ta.momentum.tsi(stock_data["Close"])
         stock_data["SMA"] = stock_data["Close"].rolling(window=20).mean()
         stock_data["MACD"] = ta.trend.macd_diff(stock_data["Close"])
         for days in [3, 5, 20, 50, 100, 200]:
@@ -174,7 +174,7 @@ class InterDayTrader(Strategy):
         stock_data = self.calculate_and_prepare(stock_data)
         features = [
             "Close",
-            "RSI",
+            "TSI",
             "SMA",
             "3_Day_%_Change",
             "5_Day_%_Change",

@@ -2,10 +2,10 @@ from datetime import datetime
 
 import pandas as pd
 
-API_KEY = "PKPRG8K0NWPZF8OVAD6D"
-API_SECRET = "3GIthGaocQkYhn0SmmIg2ZDErsUoLnwFpU6BQSBO"
+API_KEY = "API KEY"
+API_SECRET = "API SECRET"
 SLEEPTIME = "24H"
-WEBHOOK = 'https://discord.com/api/webhooks/1217652897131663360/h-eefnR2x-n2NMyDiiBJSBTkD4yA2y2p6nduoEPgfmBxoIrJ_BU_s6qR0MvVOX2WHCu1'
+WEBHOOK = "DISCORD URL"
 PAPER = True
 if PAPER:
     BASE_URL = "https://paper-api.alpaca.markets"
